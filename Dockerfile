@@ -15,4 +15,5 @@ RUN apt-get -y update && \
       git \
       g++-12 \
       pkg-config \
-      zlib1g-dev
+      zlib1g-dev \
+      gdb

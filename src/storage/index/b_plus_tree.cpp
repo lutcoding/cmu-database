@@ -435,13 +435,21 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
-  KeyType key;
-  key.SetFromInteger(0);
-  auto *transaction = new Transaction(0);
   latch_.lock();
-  auto *leaf = reinterpret_cast<LeafPage *>(GetConcurrentLeaf(key, 0, transaction)->GetData());
-  transaction->GetPageSet()->clear();
-  delete transaction;
+  auto *page = buffer_pool_manager_->FetchPage(root_page_id_);
+  page->RLatch();
+  latch_.unlock();
+  auto *btree_page = reinterpret_cast<BPlusTreePage *>(page->GetData());
+  while (!btree_page->IsLeafPage()) {
+    auto *internal = reinterpret_cast<InternalPage *>(btree_page);
+    auto *child = buffer_pool_manager_->FetchPage(internal->ValueAt(0));
+    child->RLatch();
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+    page = child;
+    btree_page = reinterpret_cast<BPlusTreePage *>(page->GetData());
+  }
+  auto *leaf = reinterpret_cast<LeafPage *>(page->GetData());
   return INDEXITERATOR_TYPE(leaf, 0, buffer_pool_manager_, leaf->GetPageId());
 }
 
