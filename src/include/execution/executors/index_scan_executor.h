@@ -47,5 +47,6 @@ class IndexScanExecutor : public AbstractExecutor {
   BPlusTreeIndexForOneIntegerColumn *tree_;
   const TableInfo *table_meta_;
   BPlusTreeIndexIteratorForOneIntegerColumn iter_;
+  bool is_empty_{false};
 };
 }  // namespace bustub
