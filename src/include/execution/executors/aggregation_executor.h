@@ -72,12 +72,32 @@ class SimpleAggregationHashTable {
    */
   void CombineAggregateValues(AggregateValue *result, const AggregateValue &input) {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
+      if (input.aggregates_[i].IsNull() && agg_types_[i] != AggregationType::CountStarAggregate) {
+        continue;
+      }
+      if (result->aggregates_[i].IsNull()) {
+        if (agg_types_[i] == AggregationType::CountAggregate) {
+          result->aggregates_[i] = ValueFactory::GetIntegerValue(1);
+        } else {
+          result->aggregates_[i] = input.aggregates_[i];
+        }
+        continue;
+      }
       switch (agg_types_[i]) {
         case AggregationType::CountStarAggregate:
+          result->aggregates_[i] = result->aggregates_[i].Add(input.aggregates_[i]);
+          break;
         case AggregationType::CountAggregate:
+          result->aggregates_[i] = result->aggregates_[i].Add(ValueFactory::GetIntegerValue(1));
+          break;
         case AggregationType::SumAggregate:
+          result->aggregates_[i] = result->aggregates_[i].Add(input.aggregates_[i]);
+          break;
         case AggregationType::MinAggregate:
+          result->aggregates_[i] = result->aggregates_[i].Min(input.aggregates_[i]);
+          break;
         case AggregationType::MaxAggregate:
+          result->aggregates_[i] = result->aggregates_[i].Max(input.aggregates_[i]);
           break;
       }
     }
@@ -204,5 +224,11 @@ class AggregationExecutor : public AbstractExecutor {
   // TODO(Student): Uncomment SimpleAggregationHashTable aht_;
   /** Simple aggregation hash table iterator */
   // TODO(Student): Uncomment SimpleAggregationHashTable::Iterator aht_iterator_;
+  SimpleAggregationHashTable aht_;
+  SimpleAggregationHashTable::Iterator aht_iterator_;
+  bool no_group_bys_{false};
+  AggregateKey single_key_;
+  bool flag_{false};
+  bool is_empty_{true};
 };
 }  // namespace bustub

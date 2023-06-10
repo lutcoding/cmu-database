@@ -13,8 +13,10 @@
 #pragma once
 
 #include <memory>
+#include <queue>
+#include <stack>
+#include <utility>
 #include <vector>
-
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/seq_scan_plan.h"
@@ -49,8 +51,42 @@ class TopNExecutor : public AbstractExecutor {
   /** @return The output schema for the topn */
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
 
+  class TupleCompare {
+   public:
+    TupleCompare(const Tuple &t, Schema *s, std::vector<std::pair<OrderByType, AbstractExpressionRef>> *order)
+        : t_(t), s_(s), order_(order) {}
+    auto GetTuple() const -> Tuple { return t_; }
+    auto operator<(const TupleCompare &r) const -> bool {
+      for (const auto &pair : *order_) {
+        Value left;
+        Value right;
+        left = pair.second->Evaluate(&t_, *s_);
+        right = pair.second->Evaluate(&r.t_, *s_);
+        if (left.CompareEquals(right) == CmpBool::CmpTrue) {
+          continue;
+        }
+        if (pair.first == OrderByType::DEFAULT || pair.first == OrderByType::ASC) {
+          return left.CompareLessThan(right) == CmpBool::CmpTrue;
+        }
+        return left.CompareGreaterThan(right) == CmpBool::CmpTrue;
+      }
+      return true;
+    }
+
+   private:
+    Tuple t_;
+    Schema *s_;
+    std::vector<std::pair<OrderByType, AbstractExpressionRef>> *order_;
+  };
+
  private:
   /** The topn plan node to be executed */
   const TopNPlanNode *plan_;
+  std::unique_ptr<AbstractExecutor> child_executor_;
+  Schema s_;
+  std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_;
+  std::priority_queue<TupleCompare, std::vector<TupleCompare>> queue_;
+  std::stack<Tuple> stack_;
 };
+
 }  // namespace bustub

@@ -19,8 +19,7 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
 
 void SeqScanExecutor::Init() {
   table_meta_ = GetExecutorContext()->GetCatalog()->GetTable(plan_->table_oid_);
-  iter_ = std::make_shared<TableIterator>(
-      table_meta_->table_->Begin(GetExecutorContext()->GetTransaction()));
+  iter_ = std::make_shared<TableIterator>(table_meta_->table_->Begin(GetExecutorContext()->GetTransaction()));
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {

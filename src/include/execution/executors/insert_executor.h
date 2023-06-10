@@ -14,7 +14,7 @@
 
 #include <memory>
 #include <utility>
-
+#include <vector>
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/insert_plan.h"

@@ -43,9 +43,9 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
     num_++;
   }
-  std::vector<Value> vals;
-  vals.emplace_back(ValueFactory::GetIntegerValue(num_));
-  *tuple = Tuple{vals, &GetOutputSchema()};
+  std::vector<Value> values;
+  values.emplace_back(ValueFactory::GetIntegerValue(num_));
+  *tuple = Tuple{values, &GetOutputSchema()};
   flag_ = true;
   return true;
 }
