@@ -21,6 +21,8 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include "map"
+#include "set"
 
 #include "common/config.h"
 #include "common/rid.h"
@@ -36,7 +38,6 @@ class TransactionManager;
 class LockManager {
  public:
   enum class LockMode { SHARED, EXCLUSIVE, INTENTION_SHARED, INTENTION_EXCLUSIVE, SHARED_INTENTION_EXCLUSIVE };
-
   /**
    * Structure to hold a lock request.
    * This could be a lock request on a table OR a row.
@@ -64,7 +65,8 @@ class LockManager {
   class LockRequestQueue {
    public:
     /** List of lock requests for the same resource (table or row) */
-    std::list<LockRequest *> request_queue_;
+    std::list<std::shared_ptr<LockRequest>> grant_queue_;
+    std::list<std::shared_ptr<LockRequest>> wait_queue_;
     /** For notifying blocked transactions on this rid */
     std::condition_variable cv_;
     /** txn_id of an upgrading transaction (if any) */
@@ -87,6 +89,37 @@ class LockManager {
     delete cycle_detection_thread_;
   }
 
+  void CheckTableLock(Transaction *txn, LockMode lock_mode);
+
+  void CheckRowLock(Transaction *txn, LockMode lock_mode, const table_oid_t &oid);
+
+  void CheckIsolationLevel(Transaction *txn, LockMode lock_mode);
+
+  void InsertTableLock(Transaction *txn, LockMode lock_mode, const table_oid_t &oid);
+
+  void InsertRowLock(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, const RID &rid);
+
+  void DeleteTableLock(Transaction *txn, LockMode lock_mode, const table_oid_t &oid);
+
+  void DeleteRowLock(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, const RID &rid);
+
+  auto UpGradeLockMode(LockMode l, LockMode r) -> bool;
+
+  auto CompatibleLockMode(LockMode l, LockMode r) -> bool;
+
+  auto GrantLock(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, std::shared_ptr<LockRequestQueue> &queue,
+                 bool is_table, RID rid) -> bool;
+
+  auto CheckUpgrade(Transaction *txn, const std::shared_ptr<LockRequestQueue> &queue, LockMode lock_mode,
+                    std::unique_lock<std::mutex> &lck, const table_oid_t &oid, bool is_table, const RID &rid) -> bool;
+
+  void ThrowException(Transaction *txn, AbortReason reason);
+
+  void AbortTransaction(Transaction *txn);
+
+  void ReleaseTxnInWaitQueue(txn_id_t id, std::shared_ptr<LockRequestQueue> &queue);
+
+  void CheckUpdateState(Transaction *txn, LockMode lock_mode);
   /**
    * [LOCK_NOTE]
    *
@@ -297,6 +330,16 @@ class LockManager {
    */
   auto RunCycleDetection() -> void;
 
+  void BuildGraph();
+
+  void InsertEdgeToGraph(const std::shared_ptr<LockRequestQueue> &queue);
+
+  void DFS(txn_id_t begin, txn_id_t now, std::vector<txn_id_t> &path);
+
+  void DFSFirstCycle(txn_id_t begin, txn_id_t now, bool &cycle_exist, std::vector<txn_id_t> &path);
+
+  void Notify(txn_id_t id);
+
  private:
   /** Fall 2022 */
   /** Structure that holds lock requests for a given table oid */
@@ -312,7 +355,9 @@ class LockManager {
   std::atomic<bool> enable_cycle_detection_;
   std::thread *cycle_detection_thread_;
   /** Waits-for graph representation. */
-  std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
+  std::unordered_map<txn_id_t, std::set<txn_id_t>> waits_for_;
+  std::unordered_map<txn_id_t, bool> visit_;
+  std::unordered_map<txn_id_t, bool> abort_;
   std::mutex waits_for_latch_;
 };
 
