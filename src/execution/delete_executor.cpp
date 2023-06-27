@@ -29,6 +29,11 @@ void DeleteExecutor::Init() {
   table_meta_ = table_meta;
   index_ = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_meta_->name_);
   child_executor_->Init();
+  if (!exec_ctx_->GetLockManager()->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE,
+                                              plan_->table_oid_)) {
+    exec_ctx_->GetTransaction()->SetState(TransactionState::ABORTED);
+    throw ExecutionException("");
+  }
 }
 
 auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
@@ -37,9 +42,16 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   }
   Tuple child_tuple{};
   while (child_executor_->Next(&child_tuple, rid)) {
+    if (!exec_ctx_->GetLockManager()->LockRow(exec_ctx_->GetTransaction(), LockManager::LockMode::EXCLUSIVE,
+                                              plan_->table_oid_, *rid)) {
+      exec_ctx_->GetTransaction()->SetState(TransactionState::ABORTED);
+      RollBackIndex();
+      throw ExecutionException("");
+    }
     num_++;
     table_meta_->table_->MarkDelete(*rid, GetExecutorContext()->GetTransaction());
     if (!index_.empty()) {
+      index_write_set_.emplace_back(std::pair(child_tuple, *rid));
       for (auto &i : index_) {
         i->index_->DeleteEntry(
             child_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), i->key_schema_, i->index_->GetKeyAttrs()),
@@ -52,6 +64,20 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   *tuple = Tuple(values, &GetOutputSchema());
   flag_ = true;
   return true;
+}
+
+void DeleteExecutor::RollBackIndex() {
+  if (index_.empty()) {
+    return;
+  }
+  for (auto &i : index_) {
+    for (const auto &j : index_write_set_) {
+      Tuple child_tuple = j.first;
+      i->index_->InsertEntry(
+          child_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), i->key_schema_, i->index_->GetKeyAttrs()),
+          j.second, exec_ctx_->GetTransaction());
+    }
+  }
 }
 
 }  // namespace bustub

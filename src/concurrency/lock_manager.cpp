@@ -41,6 +41,7 @@ void LockManager::CheckUpdateState(Transaction *txn, LockMode lock_mode) {
 
 void LockManager::ThrowException(Transaction *txn, AbortReason reason) {
   AbortTransaction(txn);
+  LOG_DEBUG("throw exception %d", reason);
   throw TransactionAbortException(txn->GetTransactionId(), reason);
 }
 

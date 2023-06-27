@@ -55,6 +55,8 @@ class DeleteExecutor : public AbstractExecutor {
   /** @return The output schema for the delete */
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); };
 
+  void RollBackIndex();
+
  private:
   /** The delete plan node to be executed */
   const DeletePlanNode *plan_;
@@ -64,5 +66,6 @@ class DeleteExecutor : public AbstractExecutor {
   std::vector<IndexInfo *> index_;
   uint32_t num_{0};
   bool flag_{false};
+  std::vector<std::pair<Tuple, RID>> index_write_set_;
 };
 }  // namespace bustub
